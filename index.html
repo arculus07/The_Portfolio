@@ -1,0 +1,1287 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ayush Ranjan - Portfolio</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { 
+      margin: 0; 
+      overflow-x: hidden; 
+      background: linear-gradient(to bottom, #F0F4F8, #D9E4E0); 
+      color: #3F4E4F;
+      position: relative;
+      font-size: 16px;
+    }
+    canvas { position: fixed; top: 0; left: 0; z-index: -1; }
+    .texture-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://www.transparenttextures.com/patterns/white-brushed.png');
+      opacity: 0.1;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .section { 
+      transition: transform 0.3s ease, box-shadow 0.3s ease; 
+      background: rgba(240, 244, 248, 0.6); 
+      border-radius: 12px; 
+      backdrop-filter: blur(10px);
+      margin: 1rem;
+      position: relative;
+      z-index: 5;
+    }
+    .section:hover { 
+      transform: translateY(-5px); 
+      box-shadow: 0 10px 20px rgba(63, 78, 79, 0.2); 
+    }
+    .skill-card, .project-card, .achievement-card { 
+      transition: all 0.3s ease; 
+      background: linear-gradient(145deg, rgba(165, 200, 214, 0.6), rgba(240, 244, 248, 0.6)); 
+      border: 1px solid rgba(63, 78, 79, 0.05); 
+      box-shadow: 0 4px 10px rgba(63, 78, 79, 0.1);
+      margin: 0.5rem;
+    }
+    .skill-card:hover, .project-card:hover, .achievement-card:hover { 
+      transform: scale(1.05); 
+      box-shadow: 0 8px 16px rgba(63, 78, 79, 0.15); 
+    }
+    .animate-fade-in { 
+      animation: fadeIn 1s ease-out; 
+    }
+    .animate-scale-in { 
+      animation: scaleIn 0.5s ease-out; 
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .avatar-img, .project-img {
+      transition: transform 0.3s ease, filter 0.3s ease;
+      width: 100%;
+      max-width: 300px;
+      height: auto;
+    }
+    .avatar-img:hover, .project-img:hover {
+      transform: scale(1.1);
+      filter: brightness(1.2);
+    }
+    .icon {
+      margin-right: 8px;
+      color: #A5C8D6;
+    }
+    /* Skill Styling */
+    .skill-item {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(27, 38, 49, 0.1);
+    }
+    .skill-item:hover {
+      background: rgba(27, 38, 49, 0.2);
+    }
+    /* Dashboard Modal */
+    #dashboard-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(30, 30, 30, 0.8);
+      z-index: 30;
+      justify-content: center;
+      align-items: center;
+    }
+    #dashboard-modal.active {
+      display: flex;
+    }
+    .dashboard-content {
+      background: rgba(241, 239, 239, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 1rem;
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(30, 30, 30, 0.3);
+    }
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-auto-rows: minmax(100px, auto);
+      grid-gap: 1rem;
+      grid-auto-flow: dense;
+    }
+    .bento-item {
+      background: linear-gradient(145deg, #D0D0D0, #A6A6A6);
+      border-radius: 12px;
+      padding: 1rem;
+      border: 1px solid rgba(89, 89, 89, 0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      color: #1E1E1E;
+    }
+    .bento-item:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 16px rgba(30, 30, 30, 0.2);
+    }
+    .bento-item img {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    .bento-item a {
+      color: #595959;
+      text-decoration: underline;
+    }
+    .bento-item a:hover {
+      color: #1E1E1E;
+    }
+    .leetcode-section {
+      background: linear-gradient(145deg, #F5F5F5, #FFFFFF);
+      color: #2B2A29;
+    }
+    .leetcode-section .stat-number {
+      color: #FFA116;
+    }
+    .close-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: #A6A6A6;
+      color: #1E1E1E;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+    }
+    .stat-number {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #595959;
+    }
+    .bento-icon {
+      margin-right: 8px;
+      color: #595959;
+      font-size: 1.5rem;
+    }
+    /* Education Tree */
+    .education-tree {
+      position: relative;
+      height: 400px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .tree-trunk {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 80%;
+      background: #1B2631;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+    }
+    .tree-branch {
+      position: absolute;
+      width: 2px;
+      background: #1B2631;
+      z-index: 2;
+    }
+    .education-milestone {
+      position: relative;
+      display: inline-block;
+      width: 150px;
+      text-align: center;
+      margin: 0 20px;
+      z-index: 3;
+    }
+    .education-milestone::before {
+      content: '';
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 20px;
+      height: 20px;
+      background: #A5C8D6;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(165, 200, 214, 0.5);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.2); }
+      100% { transform: translateX(-50%) scale(1); }
+    }
+    .education-milestone.animate-in {
+      animation: fadeInUp 1s ease-out forwards;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    /* Corner Decorations */
+    .corner-tree {
+      position: fixed;
+      width: 100px;
+      height: 100px;
+      background: url('https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/corner-design/corner-leaf.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      opacity: 0.3;
+    }
+    .top-left { top: 10px; left: 10px; }
+    .top-right { top: 10px; right: 10px; transform: rotate(90deg); }
+    .bottom-left { bottom: 10px; left: 10px; transform: rotate(-90deg); }
+    .bottom-right { bottom: 10px; right: 10px; }
+    /* Click Animation */
+    .click-ring {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #A5C8D6;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: ringExpand 2s ease-out forwards;
+    }
+    @keyframes ringExpand {
+      0% { transform: scale(0); opacity: 1; border-color: #A5C8D6; }
+      100% { transform: scale(5); opacity: 0; border-color: #1B2631; }
+    }
+    .click-spark {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      background: #A5C8D6;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: sparkBurst 2s ease-out forwards;
+    }
+    @keyframes sparkBurst {
+      0% { transform: scale(0); opacity: 1; }
+      100% { transform: scale(3); opacity: 0; }
+    }
+    /* Marquee for Experience Section */
+    .marquee-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .marquee {
+      display: flex;
+      animation: marquee 20s linear infinite;
+      white-space: nowrap;
+    }
+    .marquee img {
+      width: 200px;
+      height: 150px;
+      object-fit: cover;
+      margin: 0 10px;
+      filter: blur(5px);
+      opacity: 0.3;
+      border-radius: 8px;
+    }
+    @keyframes marquee {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+    /* Starting Screen */
+    .starting-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      color: #F0F4F8;
+    }
+    .starting-title {
+      font-size: 6rem;
+      font-weight: bold;
+      opacity: 0;
+      animation: marvelTitle 5s ease-in-out forwards;
+    }
+    @keyframes marvelTitle {
+      0% { opacity: 0; transform: scale(0.5) translateY(50px); }
+      50% { opacity: 1; transform: scale(1.1) translateY(-10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .options {
+      display: none;
+      flex-direction: column;
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    .option-btn {
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #1B2631;
+      background: linear-gradient(45deg, #A5C8D6, #D9E4E0);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      text-shadow: 0 0 5px #F0F4F8;
+    }
+    .option-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 15px #A5C8D6;
+    }
+    /* Popup for Tour Guide */
+    .tour-popup {
+      display: none;
+      position: fixed;
+      top: 50%;
+      width: 300px;
+      background: rgba(240, 244, 248, 0.9);
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 20px rgba(63, 78, 79, 0.2);
+      z-index: 25;
+      text-align: left;
+      color: #1B2631;
+    }
+    .tour-popup.active {
+      display: block;
+    }
+    .tour-popup.left {
+      left: 20px;
+      transform: translateY(-50%);
+    }
+    .tour-popup.right {
+      right: 20px;
+      transform: translateY(-50%);
+    }
+    .wipe-text {
+      position: relative;
+      overflow: hidden;
+    }
+    .wipe-text::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      animation: wipe 2s ease-out forwards;
+    }
+    @keyframes wipe {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(100%); }
+    }
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+      body {
+        font-size: 14px;
+      }
+      .section {
+        margin: 0.5rem;
+        padding: 1rem;
+      }
+      .skill-card, .project-card, .achievement-card {
+        margin: 0.25rem;
+        padding: 0.5rem;
+      }
+      .education-tree {
+        height: 300px;
+      }
+      .education-milestone {
+        width: 120px;
+        margin: 0 10px;
+      }
+      .dashboard-content {
+        padding: 0.5rem;
+      }
+      .bento-grid {
+        grid-template-columns: 1fr;
+      }
+      nav ul {
+        flex-direction: column;
+        space-x-0;
+        gap: 0.5rem;
+      }
+      .marquee img {
+        width: 150px;
+        height: 100px;
+      }
+      .starting-title {
+        font-size: 4rem;
+      }
+      .option-btn {
+        font-size: 1.2rem;
+        padding: 0.8rem 1.5rem;
+      }
+      .tour-popup {
+        width: 250px;
+        padding: 1rem;
+      }
+    }
+    @media (max-width: 480px) {
+      body {
+        font-size: 12px;
+      }
+      .avatar-img, .project-img {
+        max-width: 200px;
+      }
+      .education-milestone {
+        width: 100px;
+      }
+      .corner-tree {
+        width: 50px;
+        height: 50px;
+      }
+      .marquee img {
+        width: 100px;
+        height: 80px;
+      }
+      .starting-title {
+        font-size: 3rem;
+      }
+      .option-btn {
+        font-size: 1rem;
+        padding: 0.6rem 1rem;
+      }
+      .tour-popup {
+        width: 200px;
+        padding: 0.8rem;
+      }
+    }
+    /* Heatmap Styling */
+    .heatmap {
+      display: grid;
+      grid-template-columns: repeat(52, 1fr);
+      grid-template-rows: repeat(7, 1fr);
+      gap: 2px;
+      padding: 10px;
+      max-height: 200px;
+      overflow: hidden;
+    }
+    .heatmap-day {
+      aspect-ratio: 1;
+      border-radius: 4px;
+      background: #D0D0D0;
+      transition: background 0.3s ease;
+    }
+    .heatmap-day:hover {
+      opacity: 0.8;
+    }
+    /* Hide main content initially */
+    #main-content {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D Canvas Background -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- Starting Screen -->
+  <div class="starting-screen" id="starting-screen">
+    <h1 class="starting-title">ARCULUS</h1>
+    <div class="options" id="options">
+      <button class="option-btn" onclick="startTour()">Let me be your tour guide</button>
+      <button class="option-btn" onclick="exploreManually()">Explore manually</button>
+    </div>
+  </div>
+  <!-- Tour Popup -->
+  <div class="tour-popup" id="tour-popup"></div>
+
+  <!-- Main Content -->
+  <div id="main-content">
+    <!-- Texture Overlay -->
+    <div class="texture-overlay"></div>
+    <!-- Corner Decorations -->
+    <div class="corner-tree top-left"></div>
+    <div class="corner-tree top-right"></div>
+    <div class="corner-tree bottom-left"></div>
+    <div class="corner-tree bottom-right"></div>
+
+    <!-- Dashboard Modal -->
+    <div id="dashboard-modal">
+      <div class="dashboard-content">
+        <button class="close-btn" onclick="closeDashboard()">Close</button>
+        <h2 class="text-3xl font-bold mb-6 text-[#595959] text-center">Ayush Ranjan's Dashboard</h2>
+        <div class="bento-grid">
+          <!-- Profile Image -->
+          <div class="bento-item col-span-2 row-span-2 animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/about/avatar.jpg" alt="Ayush Ranjan" class="avatar-img" />
+            <h3 class="text-xl font-semibold mt-4 text-[#1E1E1E]"><i class="fas fa-user bento-icon"></i>Ayush Ranjan</h3>
+            <p class="text-[#595959]">Computer Science Student</p>
+          </div>
+          <!-- Social Links -->
+          <div class="bento-item col-span-3 row-span-1 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-link bento-icon"></i>Connect</h3>
+            <p class="text-[#595959]">
+              <a href="https://www.linkedin.com/in/ayush-ranjan-057157261/" target="_blank">LinkedIn</a> | 
+              <a href="https://leetcode.com/u/ArcuLus/" target="_blank">LeetCode</a> | 
+              <a href="https://auth.geeksforgeeks.org/user/ayushranjan" target="_blank">GeeksforGeeks</a> | 
+              <a href="https://github.com/arculus07" target="_blank">GitHub</a>
+            </p>
+          </div>
+          <!-- Questions Solved -->
+          <div class="bento-item col-span-1 row-span-2 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-code bento-icon"></i>Problems Solved</h3>
+            <p class="text-[#595959]"><strong>LeetCode:</strong> <span class="stat-number">400+</span></p>
+            <p class="text-[#595959]"><strong>GeeksforGeeks:</strong> <span class="stat-number">230</span></p>
+            <p class="text-[#595959]"><strong>CodeForces:</strong> <span class="stat-number">150+</span></p>
+          </div>
+          <!-- LeetCode Breakdown -->
+          <div class="bento-item col-span-2 row-span-1 animate-scale-in leetcode-section">
+            <h3 class="text-xl font-semibold mb-2"><i class="fas fa-code bento-icon"></i>LeetCode Breakdown</h3>
+            <p><strong>Easy:</strong> <span class="stat-number">160</span> (Acceptance: 70%)</p>
+            <p><strong>Medium:</strong> <span class="stat-number">200</span> (Acceptance: 50%)</p>
+            <p><strong>Hard:</strong> <span class="stat-number">40</span> (Acceptance: 40%)</p>
+          </div>
+          <!-- Skill Level -->
+          <div class="bento-item col-span-2 row-span-1 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-star bento-icon"></i>Skill Levels</h3>
+            <p class="text-[#595959]"><strong>Python & AI/ML:</strong> Advanced</p>
+            <p class="text-[#595959]"><strong>JavaScript & React.js:</strong> Intermediate</p>
+            <p class="text-[#595959]"><strong>C++:</strong> Intermediate</p>
+          </div>
+          <!-- Stats -->
+          <div class="bento-item col-span-2 row-span-2 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-chart-line bento-icon"></i>Stats</h3>
+            <p class="text-[#595959]"><strong>Total Commits:</strong> <span class="stat-number">107</span></p>
+            <p class="text-[#595959]"><strong>Longest Streak:</strong> <span class="stat-number">26</span> days</p>
+            <p class="text-[#595959]"><strong>Current Streak:</strong> <span class="stat-number">0</span> days</p>
+          </div>
+          <!-- Projects -->
+          <div class="bento-item col-span-3 row-span-3 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-project-diagram bento-icon"></i>Projects</h3>
+            <p class="text-[#595959]"><strong>LoRA Fine-Tuning for Stable Diffusion:</strong> Trained a LoRA model for Stable Diffusion, improving image generation quality.</p>
+            <p class="text-[#595959]"><strong>Conversational Data Insights Analyzer:</strong> Analyzed 100,000+ messages with NLP and pandas.</p>
+            <p class="text-[#595959]"><strong>Amazon ML Challenge (Hackathon):</strong> Ranked in Top 100 with an F1 score of 0.40.</p>
+            <p class="text-[#595959]"><strong>AI-Powered Search Backend (RAG):</strong> Improved search efficiency by 30% using Node.js and MongoDB.</p>
+            <p class="text-[#595959]"><strong>Smart Stick for Blind People:</strong> Developed an Arduino-based stick, won first prize at a state-level festival.</p>
+          </div>
+          <!-- Skills -->
+          <div class="bento-item col-span-2 row-span-2 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-tools bento-icon"></i>Skills</h3>
+            <p class="text-[#595959]">Python & AI/ML</p>
+            <p class="text-[#595959]">Java</p>
+            <p class="text-[#595959]">C++</p>
+            <p class="text-[#595959]">JavaScript & React.js</p>
+            <p class="text-[#595959]">C</p>
+            <p class="text-[#595959]">PyTorch</p>
+            <p class="text-[#595959]">SciKit-Learn</p>
+            <p class="text-[#595959]">Seaborn</p>
+            <p class="text-[#595959]">TensorFlow</p>
+            <p class="text-[#595959]">Pandas</p>
+            <p class="text-[#595959]">MySQL</p>
+            <p class="text-[#595959]">MongoDB</p>
+            <p class="text-[#595959]">Machine Learning Libraries</p>
+            <p class="text-[#595959]">Unity</p>
+            <p class="text-[#595959]">Blender</p>
+          </div>
+          <!-- Coding Heatmap -->
+          <div class="bento-item col-span-3 row-span-1 animate-scale-in">
+            <h3 class="text-xl font-semibold mb-2 text-[#1E1E1E]"><i class="fas fa-calendar-alt bento-icon"></i>LeetCode Heatmap</h3>
+            <div class="heatmap" id="heatmap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-[#F0F4F8] to-[#D9E4E0] bg-opacity-95 shadow-md sticky top-0 z-20">
+      <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-[#1B2631]"><i class="fas fa-home icon"></i>Ayush Ranjan</h1>
+        <ul class="flex space-x-6">
+          <li><a href="#about" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">About</a></li>
+          <li><a href="#skills" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Skills</a></li>
+          <li><a href="#experience" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Experience</a></li>
+          <li><a href="#projects" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Projects</a></li>
+          <li><a href="#education" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Education</a></li>
+          <li><a href="#achievements" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Achievements</a></li>
+          <li><a href="#certifications" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Certifications</a></li>
+          <li><a href="#contact" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Contact</a></li>
+          <li><a href="#" onclick="openDashboard()" class="text-[#3F4E4F] hover:text-[#1B2631] transition-colors">Dashboard</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <!-- About Section -->
+    <section id="about" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6 text-center">
+        <h2 class="text-4xl font-bold mb-6 text-[#1B2631]"><i class="fas fa-user icon"></i>About Me</h2>
+        <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/about/avatar.jpg" class="avatar-img w-32 h-32 rounded-full mx-auto mb-6" alt="Ayush Ranjan headshot" />
+        <p class="text-lg max-w-2xl mx-auto">
+          I'm Ayush Ranjan, a passionate Computer Science student at Lovely Professional University, specializing in AI, Machine Learning, and 3D graphics. With expertise in Python, Java, and more, I create innovative solutions and visually stunning projects.
+        </p>
+        <p class="mt-4"><i class="fas fa-envelope icon"></i>Email: <a href="/cdn-cgi/l/email-protection#85f7e4ebe7ece3f0f8fee5b4bcb5c5e2e8e4ece9abe6eae8" class="text-[#3F4E4F] hover:underline"><span class="__cf_email__" data-cfemail="85f7e4ebe7ece3f0f8fee5b4bcb5c5e2e8e4ece9abe6eae8">[email&nbsp;protected]</span></a> | <i class="fas fa-phone icon"></i>Phone: <a href="tel:+916205960301" class="text-[#3F4E4F] hover:underline">+916205960301</a></p>
+        <p><i class="fab fa-github icon"></i><a href="https://github.com/arculus07" class="text-[#3F4E4F] hover:underline">GitHub</a></p>
+      </div>
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-tools icon"></i>Skills</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="skill-card p-6 rounded-lg animate-scale-in">
+            <h3 class="text-xl font-semibold mb-4 text-[#1B2631]"><i class="fas fa-code icon"></i>Languages</h3>
+            <div class="skill-item"><i class="fab fa-python icon"></i>Python & AI/ML</div>
+            <div class="skill-item"><i class="fab fa-java icon"></i>Java</div>
+            <div class="skill-item"><i class="fab fa-cuttlefish icon"></i>C++</div>
+            <div class="skill-item"><i class="fab fa-js icon"></i>JavaScript & React.js</div>
+            <div class="skill-item"><i class="fab fa-cuttlefish icon"></i>C</div>
+          </div>
+          <div class="skill-card p-6 rounded-lg animate-scale-in">
+            <h3 class="text-xl font-semibold mb-4 text-[#1B2631]"><i class="fas fa-cogs icon"></i>Frameworks/Libraries</h3>
+            <div class="skill-item"><i class="fas fa-fire icon"></i>PyTorch</div>
+            <div class="skill-item"><i class="fas fa-brain icon"></i>SciKit-Learn</div>
+            <div class="skill-item"><i class="fas fa-water icon"></i>Seaborn</div>
+            <div class="skill-item"><i class="fas fa-fire icon"></i>TensorFlow</div>
+            <div class="skill-item"><i class="fas fa-table icon"></i>Pandas</div>
+          </div>
+          <div class="skill-card p-6 rounded-lg animate-scale-in">
+            <h3 class="text-xl font-semibold mb-4 text-[#1B2631]"><i class="fas fa-server icon"></i>Tools/Platforms</h3>
+            <div class="skill-item"><i class="fas fa-database icon"></i>MySQL</div>
+            <div class="skill-item"><i class="fas fa-database icon"></i>MongoDB</div>
+            <div class="skill-item"><i class="fas fa-brain icon"></i>Machine Learning Libraries</div>
+            <div class="skill-item"><i class="fas fa-gamepad icon"></i>Unity</div>
+            <div class="skill-item"><i class="fas fa-cube icon"></i>Blender</div>
+          </div>
+          <div class="skill-card p-6 rounded-lg animate-scale-in">
+            <h3 class="text-xl font-semibold mb-4 text-[#1B2631]"><i class="fas fa-star icon"></i>Soft Skills</h3>
+            <div class="skill-item"><i class="fas fa-shield-alt icon"></i>Resilience</div>
+            <div class="skill-item"><i class="fas fa-fist-raised icon"></i>Indomitable Determination</div>
+            <div class="skill-item"><i class="fas fa-microphone icon"></i>Compelling Oratory</div>
+            <div class="skill-item"><i class="fas fa-eye icon"></i>Visionary</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Experience Section with Marquee -->
+    <section id="experience" class="py-20 section animate-fade-in">
+      <div class="marquee-container">
+        <div class="marquee">
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <!-- Duplicate for seamless scrolling -->
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-2.jpg" alt="Google Research 2" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-3.jpg" alt="Google Research 3" />
+          <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/experience/google-research-1.jpg" alt="Google Research 1" />
+        </div>
+      </div>
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-briefcase icon"></i>Experience</h2>
+        <div class="p-6 rounded-lg animate-scale-in">
+          <h3 class="text-2xl font-semibold text-[#1B2631]"><i class="fab fa-google icon"></i>Adversarial Nibbler Challenge Contributor</h3>
+          <p class="text-[#3F4E4F]">Google Research | Remote | October 2024 - Present</p>
+          <ul class="list-disc ml-6 mt-4 text-[#3F4E4F]">
+            <li>Selected as 1 of 150 students to improve generative AI model safety.</li>
+            <li>Submitted <strong>300+</strong> adversarial prompts within 12 weeks, ranked among top contributors.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-project-diagram icon"></i>Projects</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="project-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/projects/lora-project.jpg" class="project-img w-full h-40 object-cover rounded-lg mb-4" alt="LoRA Fine-Tuning for Stable Diffusion" />
+            <h3 class="text-2xl font-semibold mb-2 text-[#1B2631]">LoRA Fine-Tuning for Stable Diffusion</h3>
+            <p class="text-[#3F4E4F] mb-4"><i class="fab fa-python icon"></i>Python, <i class="fas fa-image icon"></i>ComfyUI, <i class="fas fa-fire icon"></i>Stable Diffusion, <i class="fas fa-fire icon"></i>PyTorch, <i class="fas fa-robot icon"></i>Hugging Face</p>
+            <ul class="list-disc ml-6 text-[#3F4E4F]">
+              <li>Trained a LoRA model for Stable Diffusion, improving image generation quality.</li>
+              <li>Developed ComfyUI workflows for real-time image synthesis.</li>
+              <li>Optimized training on GTX 1650 4GB using xFormers.</li>
+            </ul>
+          </div>
+          <div class="project-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/projects/chat-analyzer.jpg" class="project-img w-full h-40 object-cover rounded-lg mb-4" alt="Conversational Data Insights Analyzer" />
+            <h3 class="text-2xl font-semibold mb-2 text-[#1B2631]">Conversational Data Insights Analyzer</h3>
+            <p class="text-[#3F4E4F] mb-4"><i class="fas fa-brain icon"></i>NLP, <i class="fas fa-chart-bar icon"></i>Matplotlib, <i class="fas fa-water icon"></i>Seaborn, <i class="fas fa-table icon"></i>Pandas</p>
+            <ul class="list-disc ml-6 text-[#3F4E4F]">
+              <li>Processed and analyzed <strong>100,000+</strong> messages from 10+ group chats using NLP and pandas.</li>
+              <li>Automated 10+ interactive visualizations for message frequency, peak hours, active users, and sentiment trends.</li>
+            </ul>
+          </div>
+          <div class="project-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/projects/amazon-ml.jpg" class="project-img w-full h-40 object-cover rounded-lg mb-4" alt="Amazon ML Challenge" />
+            <h3 class="text-2xl font-semibold mb-2 text-[#1B2631]">Amazon ML Challenge (Hackathon)</h3>
+            <p class="text-[#3F4E4F] mb-4"><i class="fas fa-fire icon"></i>TensorFlow, <i class="fas fa-fire icon"></i>PyTorch, <i class="fas fa-eye icon"></i>OpenCV, <i class="fas fa-robot icon"></i>BERT, <i class="fas fa-file-alt icon"></i>Tesseract</p>
+            <ul class="list-disc ml-6 text-[#3F4E4F]">
+              <li>Ranked in Top 100 among IITs, NITs, and BITs with an F1 score of <strong>0.40</strong>.</li>
+              <li>Worked with a 260,000-entry dataset including product images and entity values.</li>
+            </ul>
+          </div>
+          <div class="project-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/projects/rag-backend.jpg" class="project-img w-full h-40 object-cover rounded-lg mb-4" alt="AI-Powered Search Backend (RAG)" />
+            <h3 class="text-2xl font-semibold mb-2 text-[#1B2631]">AI-Powered Search Backend (RAG)</h3>
+            <p class="text-[#3F4E4F] mb-4"><i class="fab fa-node-js icon"></i>Node.js, <i class="fas fa-server icon"></i>Express.js, <i class="fas fa-database icon"></i>MongoDB, <i class="fas fa-search icon"></i>Milvus, <i class="fas fa-robot icon"></i>OpenAI</p>
+            <ul class="list-disc ml-6 text-[#3F4E4F]">
+              <li>Improved search efficiency by <strong>30%</strong> using Node.js, Express.js, MongoDB, and Milvus.</li>
+              <li>Integrated OpenAI’s text-embedding-small-3 and GPT-40-mini for real-time semantic search.</li>
+            </ul>
+          </div>
+          <div class="project-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/projects/smart-stick.jpg" class="project-img w-full h-40 object-cover rounded-lg mb-4" alt="Smart Stick for Blind People" />
+            <h3 class="text-2xl font-semibold mb-2 text-[#1B2631]">Smart Stick for Blind People</h3>
+            <p class="text-[#3F4E4F] mb-4"><i class="fas fa-microchip icon"></i>Arduino, <i class="fas fa-ruler icon"></i>Ultrasonic Sensors</p>
+            <ul class="list-disc ml-6 text-[#3F4E4F]">
+              <li>Developed an Arduino-based stick detecting obstacles within 2 meters.</li>
+              <li>Won first prize at a state-level infotech festival and <strong>4th</strong> nationally.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Education Section -->
+    <section id="education" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-graduation-cap icon"></i>Education</h2>
+        <div class="education-tree">
+          <div class="tree-trunk"></div>
+          <div class="tree-branch" style="top: 30%; left: 45%; width: 100px; height: 2px; transform: rotate(-30deg);"></div>
+          <div class="tree-branch" style="top: 30%; left: 55%; width: 100px; height: 2px; transform: rotate(30deg);"></div>
+          <div class="tree-branch" style="top: 60%; left: 45%; width: 100px; height: 2px; transform: rotate(-15deg);"></div>
+          <div class="tree-branch" style="top: 60%; left: 55%; width: 100px; height: 2px; transform: rotate(15deg);"></div>
+          <div class="education-milestone animate-in" style="top: 25%;">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/education/bd-public-school.jpg" alt="B.D Public School logo" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-school icon"></i>B.D Public School</h3>
+            <p class="text-[#3F4E4F]">2019-2020 | ICSE Class X | CGPA <strong>9.1</strong></p>
+            <p class="text-[#3F4E4F]">Patna, Bihar</p>
+          </div>
+          <div class="education-milestone animate-in" style="top: 50%;">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/education/himalayan-public-school.jpg" alt="Himalayan Public School logo" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-school icon"></i>Himalayan Public School</h3>
+            <p class="text-[#3F4E4F]">2020-2022 | CBSE (10+2) PCM, CS | CGPA <strong>8.2</strong></p>
+            <p class="text-[#3F4E4F]">Patna, Bihar</p>
+          </div>
+          <div class="education-milestone animate-in" style="top: 75%;">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/education/lpu.jpg" alt="Lovely Professional University logo" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-university icon"></i>Lovely Professional University</h3>
+            <p class="text-[#3F4E4F]">2022-2026 | B.Tech CSE | CGPA <strong>7.71</strong></p>
+            <p class="text-[#3F4E4F]">Phagwara, Punjab</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Achievements Section -->
+    <section id="achievements" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-trophy icon"></i>Achievements</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="achievement-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/achievements/infotech-award.jpg" alt="Infotech Award certificate" class="mx-auto mb-2" />
+            <p class="text-[#3F4E4F]"><i class="fas fa-award icon"></i>First Prize at State-Level Infotech Festival, <strong>4th</strong> at National Innovation Festival</p>
+          </div>
+          <div class="achievement-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/achievements/amazon-challenge.jpg" alt="Amazon ML Challenge ranking" class="mx-auto mb-2" />
+            <p class="text-[#3F4E4F]"><i class="fas fa-medal icon"></i>Top 100 in Nationwide AI ML Amazon Challenge (F1 Score: <strong>0.40</strong>)</p>
+          </div>
+          <div class="achievement-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/achievements/leetcode-rank.jpg" alt="LeetCode Weekly Contest 437 rank" class="mx-auto mb-2" />
+            <p class="text-[#3F4E4F]"><i class="fas fa-ranking-star icon"></i>Global Rank <strong>682</strong> in LeetCode Weekly Contest 437</p>
+          </div>
+          <div class="achievement-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/achievements/leetcode-stats.jpg" alt="LeetCode stats" class="mx-auto mb-2" />
+            <p class="text-[#3F4E4F]"><i class="fas fa-code icon"></i>LeetCode: Rating <strong>1800+</strong>, <strong>400+</strong> problems solved</p>
+          </div>
+          <div class="achievement-card p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/achievements/codeforces-stats.jpg" alt="CodeForces stats" class="mx-auto mb-2" />
+            <p class="text-[#3F4E4F]"><i class="fas fa-code icon"></i>CodeForces: Rating <strong>1250+</strong>, <strong>150+</strong> problems solved</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Certifications Section -->
+    <section id="certifications" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6">
+        <h2 class="text-4xl font-bold mb-10 text-center text-[#1B2631]"><i class="fas fa-certificate icon"></i>Certifications</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/generative-ai.jpg" alt="Generative AI with Large Language Models certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-book icon"></i>Generative AI with Large Language Models</h3>
+            <p class="text-[#3F4E4F]">DeepLearning.AI & AWS | <strong>Apr 3, 2024</strong></p>
+            <p><a href="https://coursera.org/verify/8U75T3YR53C3" class="text-[#3F4E4F] hover:underline">Verify</a></p>
+          </div>
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/build-ai-apps.jpg" alt="Build AI Apps with ChatGPT certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-robot icon"></i>Build AI Apps with ChatGPT, Dall-E, and GPT-4</h3>
+            <p class="text-[#3F4E4F]">Scrimba | <strong>Apr 24, 2024</strong></p>
+            <p><a href="https://coursera.org/verify/VZMR5K60XL2Z" class="text-[#3F4E4F] hover:underline">Verify</a></p>
+          </div>
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/intro-llms.jpg" alt="Introduction to Large Language Models certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-cloud icon"></i>Introduction to Large Language Models</h3>
+            <p class="text-[#3F4E4F]">Google Cloud | <strong>Jan 31, 2024</strong></p>
+            <p><a href="https://coursera.org/verify/NYSXAWSNI4WD" class="text-[#3F4E4F] hover:underline">Verify</a></p>
+          </div>
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/chatgpt-advanced.jpg" alt="ChatGPT Advanced Data Analysis certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-chart-line icon"></i>ChatGPT Advanced Data Analysis</h3>
+            <p class="text-[#3F4E4F]">Vanderbilt University | <strong>May 15, 2024</strong></p>
+            <p><a href="#" class="text-[#3F4E4F] hover:underline">Verify</a></p>
+          </div>
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/dsa.jpg" alt="Geeks for Geeks DSA certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-book icon"></i>Geeks for Geeks - Data Structures and Algorithms (DSA)</h3>
+            <p class="text-[#3F4E4F]">Completed <strong>230</strong> hours of intensive coursework</p>
+          </div>
+          <div class="p-6 rounded-lg animate-scale-in">
+            <img src="https://raw.githubusercontent.com/arculus07/The_Portfolio/main/images/certifications/cloud-computing.jpg" alt="NPTEL Cloud Computing certificate" class="mx-auto mb-2" />
+            <h3 class="text-xl font-semibold text-[#1B2631]"><i class="fas fa-cloud icon"></i>NPTEL - Cloud Computing</h3>
+            <p class="text-[#3F4E4F]">12-week course, score: <strong>68</strong>, IIT Kharagpur</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="py-20 section animate-fade-in">
+      <div class="container mx-auto px-6 text-center">
+        <h2 class="text-4xl font-bold mb-10 text-[#1B2631]"><i class="fas fa-envelope icon"></i>Contact Me</h2>
+        <p class="text-lg max-w-2xl mx-auto mb-6 text-[#3F4E4F]">
+          Interested in collaborating or have a project in mind? Reach out to me!
+        </p>
+        <a href="/cdn-cgi/l/email-protection#85f7e4ebe7ece3f0f8fee5b4bcb5c5e2e8e4ece9abe6eae8" class="bg-[#A5C8D6] text-[#1B2631] px-6 py-3 rounded-full hover:bg-[#3F4E4F] hover:text-[#F0F4F8] transition-colors">Email Me</a>
+      </div>
+    </section>
+  </div>
+
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+    // Dashboard Modal Functions
+    function openDashboard() {
+      document.getElementById('dashboard-modal').classList.add('active');
+    }
+    function closeDashboard() {
+      document.getElementById('dashboard-modal').classList.remove('active');
+    }
+
+    // Three.js Setup for Background
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    camera.position.z = 15;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xF0F4F8, 0.5);
+    scene.add(ambientLight);
+    const pointLight = new THREE.PointLight(0xA5C8D6, 0.8);
+    pointLight.position.set(10, 10, 10);
+    scene.add(pointLight);
+    const directionalLight = new THREE.DirectionalLight(0x1B2631, 0.5);
+    directionalLight.position.set(-10, -10, 10);
+    scene.add(directionalLight);
+
+    // 3D Background Objects (70 Cubes with Increased Visibility)
+    const cubeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const cubeMaterial = new THREE.MeshPhongMaterial({ 
+      color: 0xA5C8D6, 
+      specular: 0xF0F4F8, 
+      shininess: 50,
+      transparent: true,
+      opacity: 0.95
+    });
+    const cubes = [];
+    const cubeData = [];
+    for (let i = 0; i < 70; i++) {
+      const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+      cube.position.set(
+        (Math.random() - 0.5) * 50,
+        (Math.random() - 0.5) * 50,
+        (Math.random() - 0.5) * 50
+      );
+      cube.rotation.set(Math.random(), Math.random(), Math.random());
+      scene.add(cube);
+      cubes.push(cube);
+      cubeData.push({
+        cube: cube,
+        baseSpeed: 0.01 + Math.random() * 0.05,
+        clickPosition: null,
+        clickTime: 0,
+        originalPosition: cube.position.clone(),
+        direction: new THREE.Vector3(
+          (Math.random() - 0.5) * 0.02,
+          (Math.random() - 0.5) * 0.02,
+          (Math.random() - 0.5) * 0.02
+        )
+      });
+    }
+
+    // Click Animation (Move Away and Return on Release)
+    const clickSparks = [];
+    const sparkGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const sparkMaterial = new THREE.MeshBasicMaterial({ color: 0xA5C8D6 });
+    let isClicking = false;
+    function createClickEffect(x, y) {
+      isClicking = true;
+      // Create Ring
+      const ring = document.createElement('div');
+      ring.className = 'click-ring';
+      ring.style.left = `${x}px`;
+      ring.style.top = `${y}px`;
+      document.body.appendChild(ring);
+      setTimeout(() => ring.remove(), 2000);
+
+      // Create Sparks
+      for (let i = 0; i < 20; i++) {
+        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+        const worldPos = new THREE.Vector3(
+          (x / window.innerWidth) * 40 - 20,
+          -(y / window.innerHeight) * 20 + 10,
+          -10
+        );
+        spark.position.copy(worldPos);
+        const angle = (i / 20) * Math.PI * 2;
+        spark.velocity = new THREE.Vector3(
+          Math.cos(angle) * 0.5,
+          Math.sin(angle) * 0.5,
+          (Math.random() - 0.5) * 0.5
+        );
+        spark.life = 1;
+        scene.add(spark);
+        clickSparks.push(spark);
+      }
+
+      // 2D CSS Sparks
+      for (let i = 0; i < 15; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'click-spark';
+        spark.style.left = `${x}px`;
+        spark.style.top = `${y}px`;
+        const angle = (i / 15) * Math.PI * 2;
+        spark.style.transform = `translate(${Math.cos(angle) * 20}px, ${Math.sin(angle) * 20}px)`;
+        document.body.appendChild(spark);
+        setTimeout(() => spark.remove(), 2000);
+      }
+
+      // Cubes Move Away from Click Point
+      const clickWorldPos = new THREE.Vector3(
+        (x / window.innerWidth) * 40 - 20,
+        -(y / window.innerHeight) * 20 + 10,
+        -10
+      );
+      cubeData.forEach(data => {
+        data.clickPosition = clickWorldPos;
+        data.clickTime = Date.now();
+      });
+    }
+
+    document.addEventListener('mousedown', (event) => {
+      createClickEffect(event.clientX, event.clientY);
+    });
+
+    document.addEventListener('mouseup', () => {
+      isClicking = false;
+      cubeData.forEach(data => {
+        data.clickPosition = null;
+      });
+    });
+
+    // Mouse and Scroll Interaction
+    let mouseX = 0, mouseY = 0;
+    let scrollY = 0;
+    document.addEventListener('mousemove', (event) => {
+      mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+      mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+    });
+
+    window.addEventListener('scroll', () => {
+      scrollY = window.scrollY / window.innerHeight;
+    });
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Background Animation with Random Motion
+      cubeData.forEach((data, i) => {
+        const cube = data.cube;
+        if (data.clickPosition && isClicking) {
+          const elapsed = (Date.now() - data.clickTime) / 1000;
+          if (elapsed < 2) {
+            const direction = cube.position.clone().sub(data.clickPosition).normalize();
+            cube.position.add(direction.multiplyScalar(data.baseSpeed * 2));
+            cube.rotation.x += data.baseSpeed;
+            cube.rotation.y += data.baseSpeed;
+          }
+        } else if (!isClicking && data.clickPosition) {
+          const elapsed = (Date.now() - data.clickTime) / 1000;
+          if (elapsed < 4) {
+            cube.position.lerp(data.originalPosition, 0.1);
+            cube.rotation.x += data.baseSpeed;
+            cube.rotation.y += data.baseSpeed;
+          } else {
+            data.clickPosition = null;
+            cube.position.copy(data.originalPosition);
+          }
+        } else {
+          cube.position.add(data.direction);
+          cube.rotation.x += data.baseSpeed;
+          cube.rotation.y += data.baseSpeed;
+          cube.position.z = -15 + Math.sin(scrollY + i * 0.1) * 5;
+
+          if (Math.abs(cube.position.x) > 50 || Math.abs(cube.position.y) > 50 || Math.abs(cube.position.z) > 50) {
+            data.direction.multiplyScalar(-1);
+          }
+        }
+        cube.position.x += Math.cos(Date.now() * data.baseSpeed + i) * 0.01;
+        cube.position.y += Math.sin(Date.now() * data.baseSpeed + i) * 0.01;
+      });
+      camera.position.x += (mouseX * 10 - camera.position.x) * 0.05;
+      camera.position.y += (-mouseY * 10 - camera.position.y) * 0.05;
+      camera.lookAt(scene.position);
+      renderer.render(scene, camera);
+
+      clickSparks.forEach((spark, i) => {
+        spark.life -= 0.02;
+        if (spark.life <= 0) {
+          scene.remove(spark);
+          clickSparks.splice(i, 1);
+        } else {
+          spark.position.add(spark.velocity);
+          spark.velocity.multiplyScalar(0.95);
+          spark.material.opacity = spark.life;
+        }
+      });
+    }
+    animate();
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Trigger Education Milestones Animation on Scroll
+    const milestones = document.querySelectorAll('.education-milestone');
+    function checkMilestones() {
+      milestones.forEach(milestone => {
+        const rect = milestone.getBoundingClientRect();
+        if (rect.top >= 0 && rect.top < window.innerHeight) {
+          milestone.classList.add('animate-in');
+        }
+      });
+    }
+    window.addEventListener('scroll', checkMilestones);
+    checkMilestones();
+
+    // Generate LeetCode Heatmap
+    function generateHeatmap() {
+      const heatmap = document.getElementById('heatmap');
+      const now = new Date();
+      const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      const days = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+      const heatmapData = new Array(days).fill(0);
+
+      // Simulate 450 problems solved over the year with peaks
+      for (let i = 0; i < 450; i++) {
+        const randomDay = Math.floor(Math.random() * days);
+        heatmapData[randomDay] = (heatmapData[randomDay] || 0) + 1;
+      }
+
+      const colorScale = [
+        { threshold: 0, color: '#EDEDED' },
+        { threshold: 1, color: '#D6E685' },
+        { threshold: 5, color: '#8CC665' },
+        { threshold: 10, color: '#44A340' },
+        { threshold: 20, color: '#1E6823' }
+      ];
+
+      for (let i = 0; i < days; i++) {
+        const day = document.createElement('div');
+        day.className = 'heatmap-day';
+        const count = heatmapData[i] || 0;
+        const color = colorScale.find(c => count <= c.threshold).color;
+        day.style.backgroundColor = color;
+        day.setAttribute('data-count', count);
+        day.setAttribute('data-date', new Date(start.getTime() + i * 86400000).toISOString().split('T')[0]);
+        day.addEventListener('mouseover', () => {
+          const date = day.getAttribute('data-date');
+          const count = day.getAttribute('data-count');
+          day.title = `${date}: ${count} problems`;
+        });
+        heatmap.appendChild(day);
+      }
+    }
+    generateHeatmap();
+
+    // Starting Screen Logic
+    const startingScreen = document.getElementById('starting-screen');
+    const options = document.getElementById('options');
+    const tourPopup = document.getElementById('tour-popup');
+    const mainContent = document.getElementById('main-content');
+
+    setTimeout(() => {
+      options.style.display = 'flex';
+    }, 5000);
+
+    function startTour() {
+      startingScreen.style.display = 'none';
+      mainContent.style.display = 'block';
+      let sectionIndex = 0;
+      const sections = ['#about', '#skills', '#experience', '#projects', '#education', '#achievements', '#certifications', '#contact', '#dashboard-modal'];
+      const totalDuration = 120000; // 2 minutes in milliseconds
+      const sectionDuration = totalDuration / sections.length;
+
+      function showPopup(content) {
+        const isLeft = Math.random() > 0.5;
+        tourPopup.classList.remove('left', 'right');
+        tourPopup.classList.add(isLeft ? 'left' : 'right');
+        tourPopup.innerHTML = `<div class="wipe-text">${content}</div>`;
+        tourPopup.classList.add('active');
+        setTimeout(() => tourPopup.classList.remove('active'), sectionDuration * 0.6);
+      }
+
+      function smoothScrollTo(targetY, duration) {
+        const startY = window.scrollY;
+        const distance = targetY - startY;
+        let startTime = null;
+
+        function scrollAnimation(currentTime) {
+          if (!startTime) startTime = currentTime;
+          const timeElapsed = currentTime - startTime;
+          const progress = Math.min(timeElapsed / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+          window.scrollTo(0, startY + distance * ease);
+
+          if (progress < 1) {
+            requestAnimationFrame(scrollAnimation);
+          }
+        }
+
+        requestAnimationFrame(scrollAnimation);
+      }
+
+      function tourStep() {
+        if (sectionIndex < sections.length) {
+          const section = document.querySelector(sections[sectionIndex]);
+          if (section) {
+            const scrollPosition = section.offsetTop - 100;
+            smoothScrollTo(scrollPosition, sectionDuration * 0.4);
+
+            switch (sectionIndex) {
+              case 0:
+                showPopup('<h3>About Me</h3><p>Meet Ayush Ranjan, a dedicated Computer Science student at Lovely Professional University. Specializing in AI, Machine Learning, and 3D graphics, Ayush combines technical expertise with a passion for innovation. With skills in Python, Java, and more, he’s driven to create impactful solutions.</p>');
+                break;
+              case 1:
+                showPopup('<h3>Skills</h3><p>Ayush’s skill set is diverse, covering programming languages like Python, Java, and C++, alongside frameworks such as PyTorch and TensorFlow. He’s proficient in tools like MySQL, MongoDB, and Blender, and possesses soft skills like resilience and compelling oratory, making him a well-rounded tech enthusiast.</p>');
+                break;
+              case 2:
+                showPopup('<h3>Experience</h3><p>Ayush has made significant contributions as an Adversarial Nibbler Challenge Contributor at Google Research. Selected as one of 150 students, he submitted over 300 adversarial prompts in 12 weeks, ranking among the top contributors and enhancing generative AI model safety.</p>');
+                break;
+              case 3:
+                showPopup('<h3>Projects</h3><p>Ayush’s projects showcase his technical prowess, from fine-tuning Stable Diffusion with LoRA to analyzing conversational data with NLP, ranking high in the Amazon ML Challenge, building an AI-powered search backend, and creating a smart stick for the visually impaired.</p>');
+                break;
+              case 4:
+                showPopup('<h3>Education</h3><p>Ayush’s educational journey spans B.D Public School, Himalayan Public School, and Lovely Professional University, where he’s pursuing a B.Tech in Computer Science with a focus on AI and 3D graphics.</p>');
+                break;
+              case 5:
+                showPopup('<h3>Achievements</h3><p>Ayush has excelled with first prize at a state-level festival, a top 100 ranking in the Amazon ML Challenge, and impressive rankings on LeetCode and CodeForces.</p>');
+                break;
+              case 6:
+                showPopup('<h3>Certifications</h3><p>Ayush holds certifications in Generative AI, ChatGPT applications, Large Language Models, and more from top institutions like DeepLearning.AI, Google Cloud, and NPTEL.</p>');
+                break;
+              case 7:
+                showPopup('<h3>Contact</h3><p>Ready to collaborate? Reach out to Ayush via email or phone for project opportunities.</p>');
+                break;
+              case 8:
+                showPopup('<h3>Dashboard</h3><p>Explore Ayush’s detailed stats, skills, and project insights in the interactive dashboard.</p>');
+                openDashboard();
+                break;
+            }
+            sectionIndex++;
+            setTimeout(tourStep, sectionDuration);
+          }
+        }
+      }
+      tourStep();
+    }
+
+    function exploreManually() {
+      startingScreen.style.display = 'none';
+      mainContent.style.display = 'block';
+    }
+  </script>
